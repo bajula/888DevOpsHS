@@ -1,7 +1,26 @@
 #!/bin/bash
+### delete the repo file 
+rm -rf /etc/apt/sources.list
+touch /etc/apt/sources.list
+######
+cat <<EOF > /etc/apt/sources.list 
+deb http://deb.debian.org/debian buster main contrib non-free
+deb-src http://deb.debian.org/debian buster main contrib non-free
+
+deb http://deb.debian.org/debian-security/ buster/updates main contrib non-free
+deb-src http://deb.debian.org/debian-security/ buster/updates main contrib non-free
+
+deb http://deb.debian.org/debian buster-updates main contrib non-free
+deb-src http://deb.debian.org/debian buster-updates main contrib non-free
+
+deb http://deb.debian.org/debian buster-backports main contrib non-free
+deb-src http://deb.debian.org/debian buster-backports main contrib non-free
+EOF
+########
 apt update
 apt upgrade -y 
 apt install nginx
+systemctl enable nginx
 mkdir -p /var/www/venus.cloud
 chown -R www-data: /var/www/venus.cloud
 cat << EOF > /var/www/venus.cloud/index.html
@@ -66,3 +85,97 @@ apt-get install docker-ce docker-ce-cli containerd.io
 ## check docker 
 wait 10
 docker run hello-world
+### install bind9 
+apt install -y bind9 bind9utils bind9-doc dnsutils
+#create zone files 
+cat <<EOF > /etc/bind/named.conf.local
+##forward zone 
+zone "venus.cloud" IN { //Domain name
+
+     type master; //Primary DNS
+
+     file "/etc/bind/forward.venus.cloud.db"; //Forward lookup file
+
+     allow-update { none; }; // Since this is the primary DNS, it should be none.
+
+};
+##reverse zone 
+zone "100.168.192.in-addr.arpa" IN { //Reverse lookup name, should match your network in reverse order
+
+     type master; // Primary DNS
+
+     file "/etc/bind/reverse.venus.cloud.db"; //Reverse lookup file
+
+     allow-update { none; }; //Since this is the primary DNS, it should be none.
+};
+EOF
+touch /etc/bind/forward.venus.cloud.db
+cat <<EOF > /etc/bind/forward.venus.cloud.db
+;
+; BIND data file for local loopback interface
+;
+$TTL    604800
+@       IN      SOA     ns1.venus.cloud. root.venus.cloud. (
+                              2         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+; Commentout below three lines
+;@      IN      NS      localhost.
+;@      IN      A       127.0.0.1
+;@      IN      AAAA    ::1
+
+;Name Server Information
+
+@       IN      NS      ns1.venus.cloud.
+
+;IP address of Name Server
+
+ns1     IN      A       192.168.100.65
+
+;Mail Exchanger
+
+venus.cloud.   IN     MX   10   mail.venus.cloud.
+
+;A – Record HostName To Ip Address
+
+www     IN       A      192.168.100.65
+mail    IN       A      192.168.100.66
+
+;CNAME record
+
+ftp     IN      CNAME   www.venus.cloud.
+EOF
+touch /etc/bind/reverse.venus.cloud.db
+cat <<EOF > /etc/bind/reverse.venus.cloud.db
+;
+; BIND reverse data file for local loopback interface
+;
+$TTL    604800
+@       IN      SOA     venus.cloud. root.venus.cloud. (
+                              2         ; Serial
+                         604800         ; Refresh
+                          86400         ; Retry
+                        2419200         ; Expire
+                         604800 )       ; Negative Cache TTL
+;
+; Commentout below two lines
+
+;@      IN      NS      localhost.
+;1.0.0  IN      PTR     localhost.
+
+;Name Server Information
+
+@       IN      NS     ns1.venus.cloud.
+
+;Reverse lookup for Name Server
+
+65      IN      PTR    ns1.venus.cloud.
+
+;PTR Record IP address to HostName
+
+65     IN      PTR    www.venus.cloud.
+66     IN      PTR    mail.venus.cloud.
+EOF
