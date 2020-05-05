@@ -19,10 +19,9 @@ EOF
 ########
 apt update
 apt upgrade -y 
-apt install nginx
+apt install nginx -y 
 systemctl enable nginx
 mkdir -p /var/www/venus.cloud
-chown -R www-data: /var/www/venus.cloud
 cat << EOF > /var/www/venus.cloud/index.html
 <!DOCTYPE html>
 <html>
@@ -34,6 +33,7 @@ cat << EOF > /var/www/venus.cloud/index.html
 </body>
 </html>
 EOF
+
 ## install self-signed certificate
 mkdir -p /etc/nginx/certificates
 SSL=/etc/nginx/certificates
@@ -45,7 +45,7 @@ openssl req -new -x509 -key $SSL/venus.cloud.key -out $SSL/venus.cloud.cert -day
 touch /etc/nginx/sites-available/venus.cloud
 cat <<EOF > /etc/nginx/sites-available/venus.cloud 
 server {
-        listen 80;
+        listen 80 default_server;
         listen [::]:80;
 
         root /var/www/venus.cloud;
@@ -58,21 +58,35 @@ server {
 
         location / {
                 try_files $uri $uri/ =404;
-        }
-        
-        listen 443 ssl; 
-        ssl_certificate /etc/nginx/certificates/venus.cloud.cert
-        ssl_certificate_key /etc/nginx/certificates/venus.cloud.key
-}
+       }
+# Redirect all HTTP requests to HTTPS with a 301 Moved Permanently response.
+      return 301 https://$host$request_uri;
 
+}
+server {
+        listen 443 ssl; 
+        server_name _;
+        root /var/www/venus.cloud;
+        ssl on;
+        ssl_certificate /etc/nginx/certificates/venus.cloud.cert;
+        ssl_certificate_key /etc/nginx/certificates/venus.cloud.key;
+        ssl_prefer_server_ciphers on;
+        ssl_session_timeout 1d;
+        ssl_session_cache shared:SSL:50m;
+        ssl_session_tickets off;
+}
 EOF
+rm -rf /etc/nginx/sites-available/default
+rm -rf /etc/nginx/sites-enabled/default
 #enable the server
 ln -s /etc/nginx/sites-available/venus.cloud /etc/nginx/sites-enabled/
+chown -R www-data: /var/www/venus.cloud
+chown -R www-data:adm /var/log/nginx
 nginx -t 
 systemctl restart nginx
 
 ## install docker 
-apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -y
 ## add the key 
 curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
 ## add repository 
@@ -81,16 +95,18 @@ add-apt-repository \
    $(lsb_release -cs) \
    stable"
 apt-get update
-apt-get install docker-ce docker-ce-cli containerd.io 
+apt-get install docker-ce docker-ce-cli containerd.io -y
 ## check docker 
 wait 10
 docker run hello-world
 ### install bind9 
 apt install -y bind9 bind9utils bind9-doc dnsutils
-## enable at bot 
+## enable at boot 
 systemctl enable bind9
 ## add named into env
-export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/sbin/
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/sbin/ >  /etc/enviroment
+source /etc/environment
+systemctl restart bind9
 #create zone files 
 cat <<EOF > /etc/bind/named.conf.local
 ##forward zone 
@@ -118,7 +134,7 @@ cat <<EOF > /etc/bind/forward.venus.cloud.db
 ;
 ; BIND data file for local loopback interface
 ;
-$TTL    604800
+\$TTL    604800
 @       IN      SOA     ns1.venus.cloud. root.venus.cloud. (
                          2020050501     ; Serial
                          604800         ; Refresh
@@ -157,7 +173,7 @@ cat <<EOF > /etc/bind/reverse.venus.cloud.db
 ;
 ; BIND reverse data file for local loopback interface
 ;
-$TTL    604800
+\$TTL    604800
 @       IN      SOA     venus.cloud. root.venus.cloud. (
                          2020050501     ; Serial
                          604800         ; Refresh
@@ -183,9 +199,19 @@ $TTL    604800
 65     IN      PTR    www.venus.cloud.
 66     IN      PTR    mail.venus.cloud.
 EOF
+## clear nameserver 
+> /etc/resolv.connf
+cat <<EOF > /etc/resolv.conf
+search venus.cloud
+nameserver 127.0.0.1
+nameserver 192.168.100.1
+nameserver 8.8.8.8
+EOF
 ## restart server 
 systemctl restart bind9 
 wait 10
 ### check the zones
 named-checkzone venus.cloud /etc/bind/forward.venus.cloud.db 
-named-checkzone 100.168.192.in-addr.arpa reverse.venus.cloud.db
+named-checkzone 100.168.192.in-addr.arpa /etc/bind/reverse.venus.cloud.db
+echo "now install docker apcher2.4 on 8080"
+sh docker-apache.sh 
