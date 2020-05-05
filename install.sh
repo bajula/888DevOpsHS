@@ -4,7 +4,7 @@ apt upgrade -y
 apt install nginx
 mkdir -p /var/www/venus.cloud/
 chown -R www-data /var/www/venus.cloud
-cat << EOF > /var/www/veuns.cloud/index.html
+cat << EOF > /var/www/venus.cloud/index.html
 <!DOCTYPE html>
 <html>
 <body>
