@@ -87,6 +87,10 @@ wait 10
 docker run hello-world
 ### install bind9 
 apt install -y bind9 bind9utils bind9-doc dnsutils
+## enable at bot 
+systemctl enable bind9
+## add named into env
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/usr/sbin/
 #create zone files 
 cat <<EOF > /etc/bind/named.conf.local
 ##forward zone 
@@ -116,16 +120,16 @@ cat <<EOF > /etc/bind/forward.venus.cloud.db
 ;
 $TTL    604800
 @       IN      SOA     ns1.venus.cloud. root.venus.cloud. (
-                              2         ; Serial
+                         2020050501     ; Serial
                          604800         ; Refresh
                           86400         ; Retry
                         2419200         ; Expire
                          604800 )       ; Negative Cache TTL
 ;
 ; Commentout below three lines
-;@      IN      NS      localhost.
-;@      IN      A       127.0.0.1
-;@      IN      AAAA    ::1
+@      IN      NS      localhost.
+@      IN      A       127.0.0.1
+@      IN      AAAA    ::1
 
 ;Name Server Information
 
@@ -155,7 +159,7 @@ cat <<EOF > /etc/bind/reverse.venus.cloud.db
 ;
 $TTL    604800
 @       IN      SOA     venus.cloud. root.venus.cloud. (
-                              2         ; Serial
+                         2020050501     ; Serial
                          604800         ; Refresh
                           86400         ; Retry
                         2419200         ; Expire
@@ -179,3 +183,9 @@ $TTL    604800
 65     IN      PTR    www.venus.cloud.
 66     IN      PTR    mail.venus.cloud.
 EOF
+## restart server 
+systemctl restart bind9 
+wait 10
+### check the zones
+named-checkzone venus.cloud /etc/bind/forward.venus.cloud.db 
+named-checkzone 100.168.192.in-addr.arpa reverse.venus.cloud.db
