@@ -2,8 +2,8 @@
 apt update
 apt upgrade -y 
 apt install nginx
-mkdir -p /var/www/venus.cloud/
-chown -R www-data /var/www/venus.cloud
+mkdir -p /var/www/venus.cloud
+chown -R www-data: /var/www/venus.cloud
 cat << EOF > /var/www/venus.cloud/index.html
 <!DOCTYPE html>
 <html>
@@ -15,7 +15,14 @@ cat << EOF > /var/www/venus.cloud/index.html
 </body>
 </html>
 EOF
-#configure the nginx server 
+## install self-signed certificate
+mkdir -p /etc/nginx/certificates
+SSL=/etc/nginx/certificates
+## generate the key 
+openssl genrsa -out $SSL/venus.cloud.key 2048
+## generate the certificate for 10 years
+openssl req -new -x509 -key $SSL/venus.cloud.key -out $SSL/venus.cloud.cert -days 3650 -subj /CN=venus.cloud
+## add the certificate to nginx  and configure the server 
 touch /etc/nginx/sites-available/venus.cloud
 cat <<EOF > /etc/nginx/sites-available/venus.cloud 
 server {
@@ -27,15 +34,24 @@ server {
 
         server_name venus.cloud;
 
+        access_log /var/log/nginx/venus.access.log ;
+        error_log /var/log/nginx/venus.error.log ;
+
         location / {
                 try_files $uri $uri/ =404;
         }
+        
+        listen 443 ssl; 
+        ssl_certificate /etc/nginx/certificates/venus.cloud.cert
+        ssl_certificate_key /etc/nginx/certificates/venus.cloud.key
 }
+
 EOF
 #enable the server
 ln -s /etc/nginx/sites-available/venus.cloud /etc/nginx/sites-enabled/
 nginx -t 
 systemctl restart nginx
+
 ## install docker 
 apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
 ## add the key 
